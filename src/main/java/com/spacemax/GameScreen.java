@@ -11,6 +11,7 @@ import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.g2d.freetype.FreeTypeFontGenerator;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.math.MathUtils;
+import com.badlogic.gdx.math.Rectangle;
 import com.badlogic.gdx.utils.Array;
 
 public class GameScreen implements Screen {
@@ -21,6 +22,7 @@ public class GameScreen implements Screen {
     
     // Assets
     private Texture shipTexture;
+    private Texture meteorTexture;
     private BitmapFont hudFont;
     private FreeTypeFontGenerator fontGenerator;
 
@@ -43,6 +45,11 @@ public class GameScreen implements Screen {
     private float laserCooldown = 0.2f;
     private float timeSinceLastShot = 0;
 
+    // Meteors
+    private Array<Meteor> meteors;
+    private float meteorSpawnTimer = 0;
+    private float meteorSpawnInterval = 1.0f; // spawn every 1 second
+
     private static class Laser {
         float x, y;
         float width = 6;
@@ -61,6 +68,35 @@ public class GameScreen implements Screen {
                 active = false;
             }
         }
+
+        public Rectangle getBounds() {
+            return new Rectangle(x, y, width, height);
+        }
+    }
+
+    private static class Meteor {
+        float x, y;
+        float width = 60;
+        float height = 60;
+        float speed;
+        boolean active = true;
+
+        public Meteor(float x, float y) {
+            this.x = x;
+            this.y = y;
+            this.speed = MathUtils.random(150f, 350f);
+        }
+
+        public void update(float delta) {
+            y -= speed * delta;
+            if (y + height < 0) {
+                active = false;
+            }
+        }
+
+        public Rectangle getBounds() {
+            return new Rectangle(x + 5, y + 5, width - 10, height - 10); // make hitbox slightly smaller
+        }
     }
 
     public GameScreen(SpaceMaxGame game) {
@@ -70,6 +106,7 @@ public class GameScreen implements Screen {
 
         // Load textures
         shipTexture = new Texture(Gdx.files.internal("spaceship.png"));
+        meteorTexture = new Texture(Gdx.files.internal("meteor.png"));
 
         // Set initial ship position (bottom center)
         shipX = Gdx.graphics.getWidth() / 2f - shipWidth / 2f;
@@ -94,6 +131,12 @@ public class GameScreen implements Screen {
         }
 
         lasers = new Array<>();
+        meteors = new Array<>();
+    }
+
+    private Rectangle getShipBounds() {
+        // slightly smaller hitbox for fairness
+        return new Rectangle(shipX + 15, shipY + 15, shipWidth - 30, shipHeight - 30);
     }
 
     @Override
@@ -135,6 +178,56 @@ public class GameScreen implements Screen {
             }
         }
 
+        // Spawn meteors
+        meteorSpawnTimer += delta;
+        if (meteorSpawnTimer >= meteorSpawnInterval) {
+            float spawnX = MathUtils.random(0, Gdx.graphics.getWidth() - 60);
+            meteors.add(new Meteor(spawnX, Gdx.graphics.getHeight()));
+            meteorSpawnTimer = 0;
+        }
+
+        // Update meteors and check collisions
+        Rectangle shipBounds = getShipBounds();
+        for (int i = meteors.size - 1; i >= 0; i--) {
+            Meteor meteor = meteors.get(i);
+            meteor.update(delta);
+            
+            if (!meteor.active) {
+                meteors.removeIndex(i);
+                continue;
+            }
+
+            Rectangle meteorBounds = meteor.getBounds();
+
+            // Collision with ship
+            if (meteorBounds.overlaps(shipBounds)) {
+                meteor.active = false;
+                lives--;
+                System.out.println("Colisao com meteoro! Vidas: " + lives);
+                if (lives <= 0) {
+                    game.setScreen(new MainMenuScreen(game));
+                    return; // Stop rendering this frame
+                }
+                meteors.removeIndex(i);
+                continue;
+            }
+
+            // Collision with lasers
+            for (int j = lasers.size - 1; j >= 0; j--) {
+                Laser laser = lasers.get(j);
+                if (laser.active && meteorBounds.overlaps(laser.getBounds())) {
+                    meteor.active = false;
+                    laser.active = false;
+                    score++;
+                    break;
+                }
+            }
+
+            if (!meteor.active) {
+                meteors.removeIndex(i);
+            }
+        }
+
         // Update lasers
         for (int i = lasers.size - 1; i >= 0; i--) {
             Laser laser = lasers.get(i);
@@ -173,6 +266,11 @@ public class GameScreen implements Screen {
 
         batch.begin();
         
+        // Draw meteors (with normal blending, maybe additive depending on texture, but normal is better for dark rock)
+        for (Meteor meteor : meteors) {
+            batch.draw(meteorTexture, meteor.x, meteor.y, meteor.width, meteor.height);
+        }
+
         // Draw spaceship (additive blending to hide black background if generated by AI)
         batch.setBlendFunction(GL20.GL_SRC_ALPHA, GL20.GL_ONE);
         batch.draw(shipTexture, shipX, shipY, shipWidth, shipHeight);
@@ -206,6 +304,7 @@ public class GameScreen implements Screen {
         batch.dispose();
         shapeRenderer.dispose();
         shipTexture.dispose();
+        meteorTexture.dispose();
         hudFont.dispose();
         fontGenerator.dispose();
     }
