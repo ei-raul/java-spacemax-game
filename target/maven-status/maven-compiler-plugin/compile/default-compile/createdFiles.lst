@@ -1,7 +1,8 @@
-com\spacemax\GameScreen$Laser.class
+com\spacemax\entities\Meteor.class
 com\spacemax\MainMenuScreen$1.class
+com\spacemax\entities\Ship.class
 com\spacemax\SpaceMaxGame.class
 com\spacemax\DesktopLauncher.class
-com\spacemax\GameScreen$Meteor.class
 com\spacemax\GameScreen.class
+com\spacemax\entities\Laser.class
 com\spacemax\MainMenuScreen.class
